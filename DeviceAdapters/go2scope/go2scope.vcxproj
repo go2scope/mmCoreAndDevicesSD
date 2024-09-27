@@ -96,10 +96,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="go2scope.cpp" />
+    <ClCompile Include="BigTiffStorage.cpp" />
+    <ClCompile Include="AcqZarrStorage.cpp" />
+    <ClCompile Include="Go2ScopeStorage.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="go2scope.h" />
+    <ClInclude Include="BigTiffStorage.h" />
+    <ClInclude Include="AcqZarrStorage.h" />
+    <ClInclude Include="Go2ScopeStorage.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\MMDevice\MMDevice-StaticRuntime.vcxproj">

@@ -24,40 +24,12 @@
 //                Chan Zuckerberg Initiative (CZI)
 // 
 ///////////////////////////////////////////////////////////////////////////////
-#include "go2scope.h"
+#include "AcqZarrStorage.h"
 #include "ModuleInterface.h"
 // #include "zarr.h"
 #include "nlohmann/json.hpp"
 
 using namespace std;
-
-
-///////////////////////////////////////////////////////////////////////////////
-// Exported MMDevice API
-///////////////////////////////////////////////////////////////////////////////
-MODULE_API void InitializeModuleData()
-{
-   RegisterDevice(g_MMV1Storage, MM::StorageDevice, "Storage for old MM format");
-}
-
-MODULE_API MM::Device* CreateDevice(const char* deviceName)
-{
-   if (deviceName == 0)
-      return 0;
-
-   if (strcmp(deviceName, g_MMV1Storage) == 0)
-   {
-      return new AcqZarrStorage();
-   }
-
-   return 0;
-}
-
-MODULE_API void DeleteDevice(MM::Device* pDevice)
-{
-   delete pDevice;
-}
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // MMV1Storage

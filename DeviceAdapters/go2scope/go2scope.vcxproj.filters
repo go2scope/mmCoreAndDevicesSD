@@ -9,12 +9,24 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="go2scope.cpp">
+    <ClCompile Include="AcqZarrStorage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BigTiffStorage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Go2ScopeStorage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="go2scope.h">
+    <ClInclude Include="AcqZarrStorage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BigTiffStorage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Go2ScopeStorage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
