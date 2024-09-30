@@ -27,6 +27,7 @@
 #pragma once
 #include "Go2ScopeStorage.h"
 
+
 /**
  * Storage writer driver for BigTIFF format
  * @author Miloš Jovanović <milos@tehnocad.rs>
@@ -39,7 +40,7 @@ public:
 	// Constructors & destructors
 	//=========================================================================================================================
 	BigTiffStorage();
-   virtual ~BigTiffStorage() noexcept;
+   virtual ~BigTiffStorage() noexcept { Shutdown(); }
 
 public:
    //=========================================================================================================================
@@ -48,7 +49,7 @@ public:
    int                                             Initialize();
    int                                             Shutdown();
    void                                            GetName(char* pszName) const;
-   bool                                            Busy();
+   bool                                            Busy() { return false; }
 
 public:
    //=========================================================================================================================
@@ -74,9 +75,16 @@ public:
    // Public interface - Action interface
    //=========================================================================================================================
 
+protected:
+   //=========================================================================================================================
+   // Internal methods
+   //=========================================================================================================================
+   void                                            cacheReduce() noexcept;
+
 private:
    //=========================================================================================================================
    // Data members
    //=========================================================================================================================
+   std::map<std::string, G2SStorageEntry>          cache;                                 ///< Storage entries cache
    bool                                            initialized;                           ///< Is driver initialized
 };
