@@ -102,11 +102,13 @@ struct G2SStorageEntry
 		}
 		if(vmeta != nullptr)
 			Metadata = std::string(vmeta);
-		ImageWidth = 0;
-		ImageHeight = 0;
 		FileHandle = nullptr;
 	}
 
+	/**
+	 * Close the descriptor
+	 */
+	void close() noexcept { FileHandle = nullptr; Metadata.clear(); ImageMetadata.clear(); ImageIndex.clear(); }
 	/**
 	 * Check if file handle is open
 	 * @return Is file handle open
@@ -122,7 +124,7 @@ struct G2SStorageEntry
 	std::string													Name;												///< Dataset name
 	std::string													Metadata;										///< Dataset metadata
 	std::vector<G2SDimensionInfo>							Dimensions;										///< Dataset dimensions vector
-	std::uint32_t												ImageWidth;										///< Image width (in pixels)
-	std::uint32_t												ImageHeight;									///< Image height (in pixels)
+	std::vector<std::string>								ImageMetadata;									///< Per-image metadata
+	std::map<std::string, std::size_t>					ImageIndex;										///< Image index
 	void*															FileHandle;										///< File handle
 };

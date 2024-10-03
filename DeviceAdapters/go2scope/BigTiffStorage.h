@@ -80,11 +80,14 @@ protected:
    // Internal methods
    //=========================================================================================================================
    void                                            cacheReduce() noexcept;
+   bool                                            scanDir(const std::string& path, char** listOfDatasets, int maxItems, int maxItemLength, int cpos) noexcept;
+   std::string                                     getImageKey(int coordinates[], int numCoordinates) noexcept;
 
 private:
    //=========================================================================================================================
    // Data members
    //=========================================================================================================================
    std::map<std::string, G2SStorageEntry>          cache;                                 ///< Storage entries cache
+   std::vector<std::string>                        supportedFormats;                      ///< Supported file formats
    bool                                            initialized;                           ///< Is driver initialized
 };

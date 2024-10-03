@@ -38,6 +38,8 @@
  */
 BigTiffStorage::BigTiffStorage() : initialized(false)
 {
+   supportedFormats = { "tif", "tiff", "tf8" };
+
    InitializeDefaultErrorMessages();
 
    // set device specific error messages
@@ -73,8 +75,6 @@ int BigTiffStorage::Initialize()
    if(initialized)
       return DEVICE_OK;
 
-   int ret(DEVICE_OK);
-
    UpdateStatus();
 
    initialized = true;
@@ -93,7 +93,7 @@ int BigTiffStorage::Shutdown()
    {
       if(it->second.isOpen())
          TIFFClose((TIFF*)it->second.FileHandle);
-      it->second.FileHandle = nullptr;
+      it->second.close();
    }
    cache.clear();
    return DEVICE_OK;
@@ -218,9 +218,8 @@ int BigTiffStorage::Close(const char* handle)
    if(it->second.isOpen())
    {
       TIFFClose((TIFF*)it->second.FileHandle);
-      it->second.FileHandle = nullptr;
+      it->second.close();
    }
-   it->second.Metadata.clear();
    return DEVICE_OK;
 }
 
@@ -248,7 +247,7 @@ int BigTiffStorage::Delete(char* handle)
    if(it->second.isOpen())
    {
       TIFFClose((TIFF*)it->second.FileHandle);
-      it->second.FileHandle = nullptr;
+      it->second.close();
    }
    
    // Delete the file
@@ -262,6 +261,10 @@ int BigTiffStorage::Delete(char* handle)
 
 /**
  * List datasets in the specified folder / path
+ * If the list of found datasets is longer than 'maxItems' only first [maxItems] will be 
+ * returned and 'DEVICE_SEQUENCE_TOO_LARGE' status code will be returned
+ * If the dataset path is longer than 'maxItemLength' dataset path will be truncated
+ * If the specified path doesn't exist, or it's not a valid folder path 'DEVICE_INVALID_INPUT_PARAM' status code will be returned
  * @param path Folder path
  * @param listOfDatasets Dataset path list [out]
  * @param maxItems Max dataset count
@@ -272,30 +275,94 @@ int BigTiffStorage::List(const char* path, char** listOfDatasets, int maxItems, 
 {
    if(path == nullptr || listOfDatasets == nullptr || maxItems <= 0 || maxItemLength <= 0)
       return DEVICE_INVALID_INPUT_PARAM;
-
-   return 0;
+   auto dp = std::filesystem::u8path(path);
+   if(!std::filesystem::exists(dp) || !std::filesystem::is_directory(dp))
+      return DEVICE_INVALID_INPUT_PARAM;
+   auto allfnd = scanDir(path, listOfDatasets, maxItems, maxItemLength, 0);
+   return allfnd ? DEVICE_OK : DEVICE_SEQUENCE_TOO_LARGE;
 }
 
+/**
+ * Add image / write image to file
+ * Image metadata will be stored in cache
+ * @param handle Entry GUID
+ * @param pixels Pixel data buffer
+ * @param width Image width
+ * @param height Image height
+ * @param depth Image bit depth
+ * @param coordinates Image coordinates
+ * @param numCoordinates Coordinate count
+ * @param imageMeta Image metadata
+ * @return Status code
+ */
 int BigTiffStorage::AddImage(const char* handle, unsigned char* pixels, int width, int height, int depth, int coordinates[], int numCoordinates, const char* imageMeta)
 {
    return 0;
 }
 
+/**
+ * Get dataset summary metadata
+ * If the netadata size is longer than the provided buffer, only the first [bufSize] bytes will be
+ * copied, and the status code 'DEVICE_SEQUENCE_TOO_LARGE' will be returned
+ * @param handle Entry GUID
+ * @param meta Metadata buffer [out]
+ * @param bufSize Buffer size
+ * @return Status code
+ */
 int BigTiffStorage::GetSummaryMeta(const char* handle, char* meta, int bufSize)
 {
-   return 0;
+   if(handle == nullptr || meta == nullptr || bufSize <= 0)
+      return DEVICE_INVALID_INPUT_PARAM;
+   auto it = cache.find(handle);
+   if(it == cache.end())
+      return DEVICE_INVALID_INPUT_PARAM;
+   it->second.Metadata.copy(meta, bufSize);
+   return it->second.Metadata.size() > (std::size_t)bufSize ? DEVICE_SEQUENCE_TOO_LARGE : DEVICE_OK;
 }
 
+/**
+ * Get dataset image metadata
+ * If the netadata size is longer than the provided buffer, only the first [bufSize] bytes will be
+ * copied, and the status code 'DEVICE_SEQUENCE_TOO_LARGE' will be returned
+ * @param handle Entry GUID
+ * @param coordinates Image coordinates
+ * @param numCoordinates Coordinate count
+ * @param meta Metadata buffer [out]
+ * @param bufSize Buffer size
+ * @return Status code
+ */
 int BigTiffStorage::GetImageMeta(const char* handle, int coordinates[], int numCoordinates, char* meta, int bufSize)
 {
-   return 0;
+   if(handle == nullptr || coordinates == nullptr || numCoordinates == 0 || meta == nullptr || bufSize <= 0)
+      return DEVICE_INVALID_INPUT_PARAM;
+   auto it = cache.find(handle);
+   if(it == cache.end())
+      return DEVICE_INVALID_INPUT_PARAM;
+   auto ikey = getImageKey(coordinates, numCoordinates);
+   auto iit = it->second.ImageIndex.find(ikey);
+   if(iit == it->second.ImageIndex.end())
+      return DEVICE_INVALID_INPUT_PARAM;
+   auto iind = iit->second;
+   if(iind >= it->second.ImageMetadata.size())
+      return DEVICE_INVALID_INPUT_PARAM;
+   if(it->second.ImageMetadata[iind].size() > 0)
+      it->second.ImageMetadata[iind].copy(meta, bufSize);
+   return DEVICE_OK;
 }
 
+/**
+ * Get image / pixel data
+ * Image buffer will be created inside this method, so
+ * object (buffer) destruction becomes callers responsibility
+ * @param handle Entry GUID
+ * @param coordinates Image coordinates
+ * @param numCoordinates Coordinate count
+ * @return Pixel buffer pointer
+ */
 const unsigned char* BigTiffStorage::GetImage(const char* handle, int coordinates[], int numCoordinates)
 {
    return nullptr;
 }
-
 
 /**
  * Configure metadata for a given dimension
@@ -418,4 +485,76 @@ void BigTiffStorage::cacheReduce() noexcept
       else
          it++;
    }
+}
+
+/**
+ * Scan folder subtree for supported files
+ * @paramm path Folder path
+ * @param listOfDatasets Dataset path list [out]
+ * @param maxItems Max dataset count
+ * @param maxItemLength Max dataset path length
+ * @param cpos Current position in the list
+ * @return Was provided buffer large enough to store all dataset paths
+ */
+bool BigTiffStorage::scanDir(const std::string& path, char** listOfDatasets, int maxItems, int maxItemLength, int cpos) noexcept
+{
+   try
+   {
+      auto dp = std::filesystem::u8path(path);
+      if(!std::filesystem::exists(dp))
+         return true;
+      auto dit = std::filesystem::directory_iterator(dp);
+      if(!std::filesystem::is_directory(dp))
+         return false;
+      for(const auto& entry : dit)
+      {
+         // Skip auto folder paths
+         auto fname = entry.path().filename().u8string();
+         if(fname == "." || fname == "..")
+            continue;
+         auto abspath = std::filesystem::absolute(entry).u8string();
+
+         // Scan subfolder
+         if(std::filesystem::is_directory(entry))
+            return scanDir(abspath, listOfDatasets, maxItems, maxItemLength, cpos);
+         
+         // Skip unsupported file formats
+         auto fext = entry.path().extension().u8string();
+         if(fext.size() == 0)
+            continue;
+         if(fext[0] == '.')
+            fext = fext.substr(1);
+         std::transform(fext.begin(), fext.end(), fext.begin(), [](char c) { return (char)tolower(c); });
+         if(std::find(supportedFormats.begin(), supportedFormats.end(), fext) == supportedFormats.end())
+            continue;
+
+         // We found a supported file type
+         // Check result buffer limit
+         if(cpos >= maxItems)
+            return false;
+
+         // Add to results list
+         abspath.copy(listOfDatasets[cpos], maxItemLength);
+         cpos++;
+      }
+      return true;
+   }
+   catch(std::filesystem::filesystem_error&)
+   {
+      return false;
+   }
+}
+
+/**
+ * Calculate image key from the specified image coordinates
+ * @param coordinates Image coordinates
+ * @param numCoordinates Coordinate count
+ * @return Image key (for image cache indices)
+ */
+std::string BigTiffStorage::getImageKey(int coordinates[], int numCoordinates) noexcept
+{
+   std::stringstream ss;
+   for(int i = 0; i < numCoordinates; i++)
+      ss << (i == 0 ? "" : "_") << coordinates[i];
+   return ss.str();
 }
