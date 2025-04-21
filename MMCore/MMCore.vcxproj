@@ -143,7 +143,6 @@
     <ClInclude Include="Devices\XYStageInstance.h" />
     <ClInclude Include="Error.h" />
     <ClInclude Include="FrameBuffer.h" />
-    <ClInclude Include="Header.h" />
     <ClInclude Include="LibraryInfo\LibraryPaths.h" />
     <ClInclude Include="LoadableModules\LoadedDeviceAdapter.h" />
     <ClInclude Include="LoadableModules\LoadedModule.h" />
@@ -168,6 +167,7 @@
     <ClInclude Include="PluginManager.h" />
     <ClInclude Include="Semaphore.h" />
     <ClInclude Include="StorageMonitor.h" />
+    <ClInclude Include="StorageUtils.h" />
     <ClInclude Include="Task.h" />
     <ClInclude Include="TaskSet.h" />
     <ClInclude Include="TaskSet_CopyMemory.h" />

@@ -314,10 +314,10 @@
     <ClInclude Include="Devices\StorageInstance.h">
       <Filter>Header Files\Devices</Filter>
     </ClInclude>
-    <ClInclude Include="Header.h">
+    <ClInclude Include="StorageMonitor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="StorageMonitor.h">
+    <ClInclude Include="StorageUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

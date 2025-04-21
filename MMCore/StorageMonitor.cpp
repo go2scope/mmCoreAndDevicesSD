@@ -9,11 +9,10 @@ void StorageMonitorThread::StorageWorkFunction() {
    std::cout << "Storage monitor thread started" << std::endl;
 
    while (!shouldStop_) {
-      // Do some work here
       {
          std::unique_lock<std::mutex> lock(mutex_);
 
-         // Wait for stop signal or timeout (simulating periodic work)
+         // Wait for stop signal or timeout
          // This allows thread to respond to stop request within the timeout period
          if (cv_.wait_for(lock, std::chrono::seconds(1),
             [this] { return shouldStop_.load(); })) {
@@ -22,27 +21,38 @@ void StorageMonitorThread::StorageWorkFunction() {
          }
       }
 
-      // Perform work
-      std::cout << "Worker thread doing work..." << std::endl;
+      // Look for images in the cb and save them to dataset
       int imagesInBuffer = cbuf_->GetRemainingImageCount();
       if (imagesInBuffer > 1)
       {
-         for (int i = 0; i < imagesInBuffer - 1; i++)
+         // note: we always want to leave the last image in the buffer, so that we can monitor live
+         int size = cbuf_->Width() * cbuf_->Height() * cbuf_->Depth();
+         auto pBuf = cbuf_->GetNextImage();
+         int ret = storageInstance_->AppendImage(datasetHandle_, size, const_cast<unsigned char*>(pBuf), "", 0);
+         if (ret != DEVICE_OK)
          {
-            int size = cbuf_->Width() * cbuf_->Height() * cbuf_->Depth();
-            auto pBuf = cbuf_->GetNextImage();
-            int ret = dataset_->first->AppendImage(dataset_->second, size, const_cast<unsigned char*>(pBuf), "", 0);
-            if (ret != DEVICE_OK)
-            {
-               errorMessage_ = dataset_->first->GetErrorText(ret);
-               break;
-            }
+            errorMessage_ = storageInstance_->GetErrorText(ret);
+            hasErrors_ = true;
+            break;
          }
       }
 
       // Check stop flag again after work is done
       if (shouldStop_) {
          break;
+      }
+   }
+
+   // at this point there could be one more image in the buffer, so save it
+   if (cbuf_->GetRemainingImageCount() > 0 && !hasErrors_)
+   {
+      int size = cbuf_->Width() * cbuf_->Height() * cbuf_->Depth();
+      auto pBuf = cbuf_->GetNextImage();
+      int ret = storageInstance_->AppendImage(datasetHandle_, size, const_cast<unsigned char*>(pBuf), "", 0);
+      if (ret != DEVICE_OK)
+      {
+         errorMessage_ = storageInstance_->GetErrorText(ret);
+         hasErrors_ = true;
       }
    }
 

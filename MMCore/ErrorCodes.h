@@ -82,4 +82,5 @@
 #define MMERR_StorageImageNotAvailable 54
 #define MMERR_StorageMetadataNotAvailable 55
 #define MMERR_StorageInvalidHandle     56
+#define MMERR_AnotherDatasetAlreadyConnected 57
 #endif //_ERRORCODES_H_

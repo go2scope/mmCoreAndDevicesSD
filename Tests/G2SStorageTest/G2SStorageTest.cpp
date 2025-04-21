@@ -32,7 +32,8 @@
 #define TEST_WRITE				1
 #define TEST_READ					2
 #define TEST_ACQ					3
-#define TEST_VER					"1.0.0"
+#define TEST_ATTACHED			4
+#define TEST_VER					"1.0.1"
 #define ENGINE_BIGTIFF			1
 #define ENGINE_ZARR				2
 #define CAMERA_DEMO				1
@@ -74,23 +75,26 @@ int main(int argc, char** argv)
 	// Obtain selected test
 	std::string carg(argv[1]);
 	std::transform(carg.begin(), carg.end(), carg.begin(), [](char c) { return std::tolower(c); });
-	if(carg == "-v")
+	if (carg == "-v")
 	{
 		std::cout << "G2SStorageTest " << TEST_VER << std::endl;
 		return 0;
 	}
-	else if(carg == "-help")
+	else if (carg == "-help")
 	{
-		std::cout << "Available test suites: write, read, acq" << std::endl << std::endl;
+		std::cout << "Available test suites: write, read, acq, attached" << std::endl << std::endl;
 		std::cout << "For write test type:" << std::endl;
 		std::cout << "G2SStorageTest write [storage_engine] [save_location] [camera] [channel_count] [time_points_count] [positions_count] [direct_io] [flush_cycle]" << std::endl << std::endl;
-		
+
 		std::cout << "For read test type:" << std::endl;
 		std::cout << "G2SStorageTest read [storage_engine] [save_location] [dataset_name] [direct_io] [optimal_access] [print_meta]" << std::endl << std::endl;
-		
+
 		std::cout << "For acquisition test type:" << std::endl;
 		std::cout << "G2SStorageTest acq [storage_engine] [save_location] [camera] [channel_count] [time_points_count] [positions_count] [direct_io] [flush_cycle]" << std::endl << std::endl;
-		
+
+		std::cout << "For attached storage test:" << std::endl;
+		std::cout << "G2SStorageTest attached [storage_engine] [save_location] [camera] [channel_count] [time_points_count] [positions_count] [direct_io] [flush_cycle]" << std::endl << std::endl;
+
 		std::cout << "Available storage engines: zarr, bigtiff (default)" << std::endl;
 		std::cout << "Available cameras: demo (default), hamamatsu" << std::endl;
 		std::cout << "The following options are basic ON/OFF (1/0) flags: [direct_io] [optimal_access] [print_meta]" << std::endl;
@@ -106,8 +110,14 @@ int main(int argc, char** argv)
 		std::cout << "Default dataset name is test-[storage_engine]" << std::endl;
 		return 0;
 	}
-	else if(carg == "read" || carg == "write" || carg == "acq")
-		selectedTest = carg == "write" ? TEST_WRITE : (carg == "read" ? TEST_READ : TEST_ACQ);
+	else if (carg == "read")
+		selectedTest = TEST_READ;
+	else if (carg == "write")
+		selectedTest = TEST_READ;
+	else if (carg == "acq")
+		selectedTest = TEST_ACQ;
+	else if (carg == "attached")
+		selectedTest = TEST_ATTACHED;
 	else
 	{
 		std::cout << "Invalid test suite selected. To see program options type G2SStorageTest -help" << std::endl;
@@ -145,7 +155,7 @@ int main(int argc, char** argv)
 	// Obtain dataset name (READ test)
 	if(argc > 4 && selectedTest == TEST_READ)
 		datasetname = std::string(argv[4]);	
-	// Obtain camera type (WRITE, ACQ tests)
+	// Obtain camera type (WRITE, ACQ, ATTACHED tests)
 	else if(argc > 4)
 	{
 		carg = std::string(argv[4]);
@@ -162,7 +172,7 @@ int main(int argc, char** argv)
 	// Obtain I/O type (READ test)
 	if(argc > 5 && selectedTest == TEST_READ)
 		try { directIO = std::stoi(argv[5]) != 0; } catch(std::exception& e) { std::cout << "Invalid argument value. " << e.what() << std::endl; return 1; }
-	// Obtain channel count (WRITE, ACQ tests)
+	// Obtain channel count (WRITE, ACQ, ATTACHED tests)
 	else if(argc > 5)
 		try { channels = (int)std::stoul(argv[5]); } catch(std::exception& e) { std::cout << "Invalid argument value. " << e.what() << std::endl; return 1; }
 
@@ -180,11 +190,11 @@ int main(int argc, char** argv)
 	else if(argc > 7)
 		try { positions = (int)std::stoul(argv[7]); } catch(std::exception& e) { std::cout << "Invalid argument value. " << e.what() << std::endl; return 1; }
 
-	// Obtain I/O type (WRITE, ACQ tests)
+	// Obtain I/O type (WRITE, ACQ, ATTACHED tests)
 	if(argc > 8 && selectedTest != TEST_READ)
 		try { directIO = std::stoi(argv[8]) != 0; } catch(std::exception& e) { std::cout << "Invalid argument value. " << e.what() << std::endl; return 1; }
 
-	// Obtain flush cycle (WRITE, ACQ tests)
+	// Obtain flush cycle (WRITE, ACQ, ATTACHED tests)
 	if(argc > 9 && selectedTest != TEST_READ)
 		try { flushcycle = (int)std::stoul(argv[9]) != 0; } catch(std::exception& e) { std::cout << "Invalid argument value. " << e.what() << std::endl; return 1; }
 
@@ -272,6 +282,8 @@ int main(int argc, char** argv)
 		else if(selectedTest == TEST_READ)
 			testReader(core, savelocation, datasetname, optimalaccess, printmeta);
 		else if(selectedTest == TEST_ACQ)
+			testAcquisition(core, savelocation, datasetname, channels, timepoints, positions);
+		else if (selectedTest == TEST_ATTACHED)
 			testAcquisition(core, savelocation, datasetname, channels, timepoints, positions);
 		else
 			std::cout << "Invalid test suite selected. Exiting..." << std::endl;

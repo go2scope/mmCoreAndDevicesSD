@@ -54,6 +54,8 @@
 #include "MMCore.h"
 #include "MMEventCallback.h"
 #include "PluginManager.h"
+#include "StorageUtils.h"
+#include "StorageMonitor.h"
 
 #include <algorithm>
 #include <cassert>
@@ -142,12 +144,12 @@ CMMCore::CMMCore() :
    deviceManager_(new mm::DeviceManager()),
    pPostedErrorsLock_(NULL),
    datasetHandleCounter_(0),
-   attachedDatasetHandle_(-1)
+   attachedDatasetHandle_(-1),
+   storageMonitor_(nullptr)
 {
    configGroups_ = new ConfigGroupCollection();
    pixelSizeGroup_ = new PixelSizeConfigGroup();
    pPostedErrorsLock_ = new MMThreadLock();
-   attachedDataset_ = std::make_pair(nullptr, -1);
 
    InitializeErrorMessages();
 
@@ -1041,8 +1043,8 @@ std::pair<std::shared_ptr<StorageInstance>, int> CMMCore::getStorageInstanceFrom
    if (openDatasets_.find(coreHandle) == openDatasets_.end())
       throw CMMError(getCoreErrorText(MMERR_StorageInvalidHandle).c_str(), MMERR_StorageInvalidHandle);
 
-   int deviceHandle = openDatasets_[coreHandle].second;
-   std::string deviceLabel = openDatasets_[coreHandle].first;
+   int deviceHandle = openDatasets_[coreHandle].handle;
+   std::string deviceLabel = openDatasets_[coreHandle].adapterName;
 
    return std::make_pair(deviceManager_->GetDeviceOfType<StorageInstance>(deviceLabel), deviceHandle);
 }
@@ -7609,6 +7611,7 @@ void CMMCore::InitializeErrorMessages()
    errorText_[MMERR_StorageImageNotAvailable] = "Image not available at specified coordinates.";
    errorText_[MMERR_StorageMetadataNotAvailable] = "Metadata not available.";
    errorText_[MMERR_StorageInvalidHandle] = "Invalid or obsolete handle.";
+   errorText_[MMERR_AnotherDatasetAlreadyConnected] = "Another dataset is already connected.";
 }
 
 void CMMCore::CreateCoreProperties()
@@ -8120,7 +8123,7 @@ int CMMCore::createDataset(const char* path, const char* name, const std::vector
          logError(getDeviceName(pStorage).c_str(), getDeviceErrorText(ret, pStorage).c_str());
          throw CMMError(getDeviceErrorText(ret, pStorage).c_str(), MMERR_DEVICE_GENERIC);
       }
-      openDatasets_[datasetHandleCounter_] = std::make_pair(getDeviceName(pStorage), handle);
+      openDatasets_[datasetHandleCounter_] = DatasetEntry(getDeviceName(pStorage), handle);
       return datasetHandleCounter_++;
    }
    throw CMMError(getCoreErrorText(MMERR_StorageNotAvailable).c_str(), MMERR_StorageNotAvailable);
@@ -8153,7 +8156,7 @@ int CMMCore::createDataset(const char* deviceLabel, const char* path, const char
          logError(getDeviceName(pStorage).c_str(), getDeviceErrorText(ret, pStorage).c_str());
          throw CMMError(getDeviceErrorText(ret, pStorage).c_str(), MMERR_DEVICE_GENERIC);
       }
-      openDatasets_[datasetHandleCounter_] = std::make_pair(getDeviceName(pStorage), handle);
+      openDatasets_[datasetHandleCounter_] = DatasetEntry(getDeviceName(pStorage), handle);
       return datasetHandleCounter_++;
    }
    throw CMMError(getCoreErrorText(MMERR_StorageNotAvailable).c_str(), MMERR_StorageNotAvailable);
@@ -8221,7 +8224,7 @@ int CMMCore::loadDataset(const char* path) throw (CMMError)
          logError(getDeviceName(pStorage).c_str(), getDeviceErrorText(ret, pStorage).c_str());
          throw CMMError(getDeviceErrorText(ret, pStorage).c_str(), MMERR_DEVICE_GENERIC);
       }
-      openDatasets_[datasetHandleCounter_] = std::make_pair(getDeviceName(pStorage), deviceHandle);
+      openDatasets_[datasetHandleCounter_] = DatasetEntry(getDeviceName(pStorage), deviceHandle);
       return datasetHandleCounter_++;
    }
    throw CMMError(getCoreErrorText(MMERR_StorageNotAvailable).c_str(), MMERR_StorageNotAvailable);
@@ -8249,7 +8252,7 @@ int CMMCore::loadDataset(const char* deviceLabel, const char* path) throw(CMMErr
          logError(getDeviceName(pStorage).c_str(), getDeviceErrorText(ret, pStorage).c_str());
          throw CMMError(getDeviceErrorText(ret, pStorage).c_str(), MMERR_DEVICE_GENERIC);
       }
-      openDatasets_[datasetHandleCounter_] = std::make_pair(getDeviceName(pStorage), deviceHandle);
+      openDatasets_[datasetHandleCounter_] = DatasetEntry(getDeviceName(pStorage), deviceHandle);
       return datasetHandleCounter_++;
    }
    throw CMMError(getCoreErrorText(MMERR_StorageNotAvailable).c_str(), MMERR_StorageNotAvailable);
@@ -8948,21 +8951,34 @@ void CMMCore::attachDatasetToCircularBuffer(int handle)  throw (CMMError)
 {
    if (handle < 0)
    {
+      // handle less than zero means we are stopping the recording of buffer data
+      // first shut down the saving thread
+      if (storageMonitor_)
+      {
+         storageMonitor_->stop();
+         delete storageMonitor_;
+         storageMonitor_ = nullptr;
+      }
+
       // disconnect dataset
       attachedDatasetHandle_ = -1;
-      attachedDataset_ = std::make_pair(nullptr, -1);
-      // TODO: shut down saving thread
       return;
    }
 
+   // map the core handle to device handle
    auto storageInstance = getStorageInstanceFromHandle(handle);
    auto pStorage = storageInstance.first;
    auto deviceHandle = storageInstance.second;
 
-   attachedDataset_ = std::make_pair(pStorage, deviceHandle);
    attachedDatasetHandle_ = handle;
 
-   // TODO: start save thread for the circular buffer
+   if (storageMonitor_)
+   {
+      throw CMMError(getCoreErrorText(MMERR_AnotherDatasetAlreadyConnected).c_str(), MMERR_AnotherDatasetAlreadyConnected);
+   }
+
+   storageMonitor_ = new StorageMonitorThread(cbuf_, pStorage, deviceHandle);
+   storageMonitor_->start();
 }
 
 /**
@@ -8972,6 +8988,20 @@ void CMMCore::attachDatasetToCircularBuffer(int handle)  throw (CMMError)
 int CMMCore::getAttachedDataset()
 {
    return attachedDatasetHandle_;
+}
+
+int CMMCore::getAttachedDatasetStatus()
+{
+   if (!storageMonitor_)
+      // if the thread is not instantiated, no datasets are attached
+      return -1;
+   else if (!storageMonitor_->isRunning())
+      // is the thread is instantiated but not running it means it exited with error
+      // we need to ask for the last error message
+      return 1;
+
+   // if we get to here the thread is running and the dataset is attached
+   return 0;
 }
 
 /**

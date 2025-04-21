@@ -1,3 +1,26 @@
+///////////////////////////////////////////////////////////////////////////////
+// FILE:          StorageMonitor.h
+// PROJECT:       Micro-Manager
+// SUBSYSTEM:     MMCore
+//-----------------------------------------------------------------------------
+// DESCRIPTION:   Thread that monitors the circular buffer and saves any images
+//                that it finds
+//
+// AUTHOR:        Nenad Amodaj, 2025
+//
+// COPYRIGHT:     Nenad Amodaj 2025
+//
+// LICENSE:       This file is distributed under the "Lesser GPL" (LGPL) license.
+//                License text is included with the source distribution.
+//
+//                This file is distributed in the hope that it will be useful,
+//                but WITHOUT ANY WARRANTY; without even the implied warranty
+//                of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//
+//                IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+//                CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+//                INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
+
 #pragma once
 #include <iostream>
 #include <thread>
@@ -16,15 +39,18 @@ private:
    std::mutex mutex_;
    std::condition_variable cv_;
    CircularBuffer* cbuf_;
-   std::pair<std::shared_ptr<StorageInstance>, int>* dataset_;
+   std::shared_ptr<StorageInstance> storageInstance_;
+   int datasetHandle_;
    std::string errorMessage_;
+   std::atomic<bool> hasErrors_;
 
-   // The actual work function that runs in the thread
+   // the function that runs in a thread
+   // monitors circular buffer and saves any images that it finds
    void StorageWorkFunction();
 
 public:
-   StorageMonitorThread(CircularBuffer* buf, std::pair<std::shared_ptr<StorageInstance>, int>* dataset) : 
-      running_(false), shouldStop_(false), cbuf_(buf), dataset_(dataset) {}
+   StorageMonitorThread(CircularBuffer* buf, std::shared_ptr<StorageInstance> pStorage, int handle) : 
+      running_(false), shouldStop_(false), cbuf_(buf), storageInstance_(pStorage), datasetHandle_(handle), hasErrors_(false) {}
 
    ~StorageMonitorThread() {
       // Ensure thread is properly stopped if not already
@@ -43,6 +69,7 @@ public:
       // Only start if not already running
       if (!running_) {
          shouldStop_ = false;
+         hasErrors_ = false;
          thread_ = std::thread(&StorageMonitorThread::StorageWorkFunction, this);
       }
    }
@@ -69,6 +96,11 @@ public:
    // Check if thread is running
    bool isRunning() const {
       return running_.load();
+   }
+
+   // check if there were any errors
+   bool hasErrors() const {
+      return hasErrors_.load();
    }
 };
 

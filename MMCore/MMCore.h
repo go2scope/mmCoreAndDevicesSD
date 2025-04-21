@@ -73,7 +73,6 @@
 #include <string>
 #include <vector>
 
-
 #if !defined(SWIGJAVA) && !defined(SWIGPYTHON)
 #   ifdef _MSC_VER
 #      define MMCORE_DEPRECATED(prototype) __declspec(deprecated) prototype
@@ -90,7 +89,6 @@ typedef unsigned char* STORAGEIMG;
 typedef unsigned short* STORAGEIMG16;
 typedef unsigned char* STORAGEIMGOUT;
 typedef unsigned char* STORAGEMETA;
-using DatasetEntry = std::pair<std::string, int>; // string - device name, int - handle
 
 class CPluginManager;
 class CircularBuffer;
@@ -100,6 +98,8 @@ class CorePropertyCollection;
 class MMEventCallback;
 class Metadata;
 class PixelSizeConfigGroup;
+class StorageMonitorThread;
+class DatasetEntry;
 
 class AutoFocusInstance;
 class CameraInstance;
@@ -677,6 +677,7 @@ public:
    STORAGEIMGOUT appendAndGetNextToDataset(int handle, const std::vector<long>& coordinates, const char* imageMeta, int imageMetaLength) throw (CMMError);
    void attachDatasetToCircularBuffer(int handle) throw (CMMError);
    int getAttachedDataset();
+   int getAttachedDatasetStatus();
    std::string getLastAttachedDatasetError();
 
    ///@}
@@ -717,9 +718,9 @@ private:
    PixelSizeConfigGroup* pixelSizeGroup_;
    CircularBuffer* cbuf_;
    std::map<int, DatasetEntry> openDatasets_;
-   int datasetHandleCounter_;
-   std::pair<std::shared_ptr<StorageInstance>, int> attachedDataset_;
-   int attachedDatasetHandle_;
+   int datasetHandleCounter_;                                           // counter for core storage handles
+   int attachedDatasetHandle_;                                          // core dataset handle
+   StorageMonitorThread* storageMonitor_;                               // thread that saves from cb to attached dataset
 
    std::shared_ptr<CPluginManager> pluginManager_;
    std::shared_ptr<mm::DeviceManager> deviceManager_;
